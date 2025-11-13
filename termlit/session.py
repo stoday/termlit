@@ -71,11 +71,24 @@ class TermlitSession:
         except Exception:  # pragma: no cover - network issues
             pass
 
-    def receive_line(self, prompt: str = "") -> str:
+    def receive_line(
+        self,
+        prompt: str = "",
+        *,
+        allow_empty: bool = True,
+        hidden: bool = False,
+    ) -> str:
         """
         Read a line of user input with rudimentary line-editing, arrow navigation,
         and UTF-8 aware character handling. This intentionally keeps the feature
         set minimal but good enough for common SSH clients.
+
+        Args:
+            prompt: Text displayed before waiting for keystrokes.
+            allow_empty: If False, blank submissions are ignored and the same
+                prompt is redrawn in place.
+            hidden: When True, the typed characters are replaced by ``*`` while
+                editing (useful for passwords).
         """
         import codecs
 
@@ -88,20 +101,24 @@ class TermlitSession:
 
         def redraw() -> None:
             line = "".join(buffer)
+            visible = "*" * len(line) if hidden else line
             self.send("\r", newline=False)
-            self.send(prompt + line, newline=False)
+            self.send(prompt + visible, newline=False)
             self.send("\x1b[0K", newline=False)  # clear to end of line
-            back = len(line) - cursor
+            back = len(visible) - cursor
             if back > 0:
                 self.send(f"\x1b[{back}D", newline=False)
 
         while True:
             data = self.channel.recv(1)
             if not data:
-                break
-
+                break            
+            
             byte = data[0]
             if byte in (0x0D, 0x0A):  # Enter
+                if not allow_empty and not buffer:
+                    redraw()
+                    continue
                 self.send("\r\n", newline=False)
                 return "".join(buffer)
             if byte in (0x7F, 0x08):  # Backspace
@@ -281,10 +298,22 @@ def welcome(
     session.send(console.file.getvalue(), newline=False)
 
 
-def input(prompt: str) -> str:
-    """Request a line of user input."""
+def input(
+    prompt: str,
+    *,
+    allow_empty: bool = False,
+    hidden: bool = False,
+) -> str:
+    """
+    Request a line of user input.
+
+    Args:
+        prompt: Text shown before waiting for input.
+        allow_empty: Whether to accept an empty submission (default False).
+        hidden: Mask typed characters (for passwords).
+    """
     session = _current_session()
-    return session.receive_line(prompt)
+    return session.receive_line(prompt, allow_empty=allow_empty, hidden=hidden)
 
 
 def write(message: object) -> None:

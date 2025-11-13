@@ -111,11 +111,22 @@ def _redirect_stdio(session: TermlitSession):
 class _SSHInterface(paramiko.ServerInterface):
     """Minimal Paramiko server interface with password authentication."""
 
-    def __init__(self, users: Optional[Dict[str, str]]):
+    def __init__(self, users: Optional[Dict[str, str]], auth_mode: str = "ssh"):
         self._users = users or {}
+        self._auth_mode = auth_mode
         self.username: Optional[str] = None
 
+    def check_auth_none(self, username):
+        if self._auth_mode == "none":
+            self.username = username or "anonymous"
+            return paramiko.AUTH_SUCCESSFUL
+        return paramiko.AUTH_FAILED
+
     def check_auth_password(self, username, password):
+        if self._auth_mode == "none":
+            self.username = username or "anonymous"
+            return paramiko.AUTH_SUCCESSFUL
+
         if not self._users:
             self.username = username or "anonymous"
             return paramiko.AUTH_SUCCESSFUL
@@ -156,12 +167,17 @@ class TermlitSSHServer:
         port: int = 2222,
         runner: SessionRunner,
         users: Optional[Dict[str, str]] = None,
+        auth_mode: str = "ssh",
         key_path: Path = DEFAULT_KEY_PATH,
     ):
         self.host = host
         self.port = port
         self.runner = runner
-        self.users = users.copy() if users is not None else DEFAULT_USERS.copy()
+        self.auth_mode = auth_mode
+        if auth_mode == "ssh":
+            self.users = users.copy() if users is not None else DEFAULT_USERS.copy()
+        else:
+            self.users = {}
         self.key_path = key_path
         self.server_key = self._load_or_create_key()
         self._socket: Optional[socket.socket] = None
@@ -191,7 +207,9 @@ class TermlitSSHServer:
         self._socket.settimeout(0.5)
 
         print(f"[Termlit] SSH server listening on {self.host}:{self.port}")
-        if self.users:
+        if self.auth_mode == "none":
+            print("[Termlit] Passwordless login enabled (--auth none).")
+        elif self.users:
             pw_info = ", ".join(f"{u}/{p}" for u, p in self.users.items())
             print(f"[Termlit] Available logins: {pw_info}")
         else:
@@ -224,7 +242,7 @@ class TermlitSSHServer:
         try:
             transport = paramiko.Transport(client_socket)
             transport.add_server_key(self.server_key)
-            interface = _SSHInterface(self.users)
+            interface = _SSHInterface(self.users, auth_mode=self.auth_mode)
             transport.start_server(server=interface)
             channel = transport.accept(30)
             if channel is None:
@@ -272,10 +290,17 @@ def run(
     host: str = "0.0.0.0",
     port: int = 2222,
     users: Optional[Dict[str, str]] = None,
+    auth_mode: str = "ssh",
 ) -> None:
     """Start the SSH server with an in-memory callable app."""
     runner = CallableRunner(app)
-    server = TermlitSSHServer(host=host, port=port, runner=runner, users=users)
+    server = TermlitSSHServer(
+        host=host,
+        port=port,
+        runner=runner,
+        users=users,
+        auth_mode=auth_mode,
+    )
     server.serve_forever()
 
 
@@ -285,8 +310,15 @@ def serve_script(
     host: str = "0.0.0.0",
     port: int = 2222,
     users: Optional[Dict[str, str]] = None,
+    auth_mode: str = "ssh",
 ) -> None:
     """Start the SSH server using a script file as the app entry."""
     runner = ScriptRunner(script_path)
-    server = TermlitSSHServer(host=host, port=port, runner=runner, users=users)
+    server = TermlitSSHServer(
+        host=host,
+        port=port,
+        runner=runner,
+        users=users,
+        auth_mode=auth_mode,
+    )
     server.serve_forever()

@@ -8,6 +8,7 @@ them over SSH via `termlit run app.py`.
 - Built-in Rich welcome panels and simple text helpers
 - Rich-powered spinners that lock user input while background work is running
 - Request/response helpers (`termlit.post`) powered by `requests`
+- Password-masked input via `termlit.input(..., hidden=True)`
 - Session-scoped stdout redirection so `print()` just works
 
 ## Quick start
@@ -47,10 +48,13 @@ them over SSH via `termlit run app.py`.
        termlit.write("回答: " + str(response.json()))
    ```
    > `termlit.spinner` 會預設鎖定輸入，因此使用者無法在等待期間排隊輸入任何字。
+   > 預設情況下 `termlit.input` 會忽略空白輸入，若要允許可傳入 `allow_empty=True`。
+   > 需要輸入密碼時可使用 `termlit.input("input password: ", hidden=True)` 來以 `*` 遮罩輸入。
 3. Serve it over SSH:
    ```bash
    termlit run app.py --host 0.0.0.0 --port 2222
    ```
+   > 加上 `--auth none` 可讓使用者免密碼登入（預設為 `--auth ssh` 需輸入密碼）。
 4. Connect from any SSH client (default credentials `admin/password123`):
    ```bash
    ssh admin@127.0.0.1 -p 2222
@@ -58,6 +62,7 @@ them over SSH via `termlit run app.py`.
 
 ## CLI flags
 - `--user name=secret`: add/override login credentials (repeatable).
+- `--auth {ssh,none}`: choose between password-protected (`ssh`) or passwordless (`none`) sessions.
 - `--allow-anonymous`: accept any username/password combo.
 - `--host` / `--port`: where the SSH server listens.
 
@@ -74,6 +79,7 @@ def app():
 if __name__ == "__main__":
     termlit.run(app, host="127.0.0.1", port=2222)
 ```
+> 需要免密碼體驗時，可傳入 `auth_mode="none"` 給 `termlit.run`.
 
 ## Repository layout
 - `termlit/session.py` – public helper implementations.

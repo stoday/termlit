@@ -7,6 +7,8 @@ import sys
 from pathlib import Path
 from typing import Dict, List
 
+AUTH_MODES = ("ssh", "none")
+
 from .runtime import serve_script
 
 
@@ -37,6 +39,13 @@ def main(argv: List[str] | None = None) -> None:
     run_parser.add_argument("--host", default="0.0.0.0", help="SSH host to bind")
     run_parser.add_argument("--port", type=int, default=2222, help="SSH port")
     run_parser.add_argument(
+        "--auth",
+        choices=AUTH_MODES,
+        default="ssh",
+        help="Authentication mode: 'ssh' asks for a password (default), "
+        "while 'none' allows passwordless sessions.",
+    )
+    run_parser.add_argument(
         "--user",
         action="append",
         default=[],
@@ -55,8 +64,15 @@ def main(argv: List[str] | None = None) -> None:
         if not script_path.exists():
             parser.error(f"Script not found: {script_path}")
 
-        users = _parse_users(args.user)
-        selected_users = {} if args.allow_anonymous else users or None
+        if args.auth == "none":
+            if args.user:
+                parser.error("--user and --auth none are mutually exclusive.")
+            if args.allow_anonymous:
+                parser.error("--allow-anonymous is not needed with --auth none.")
+            selected_users = None
+        else:
+            users = _parse_users(args.user)
+            selected_users = {} if args.allow_anonymous else users or None
 
         try:
             serve_script(
@@ -64,6 +80,7 @@ def main(argv: List[str] | None = None) -> None:
                 host=args.host,
                 port=args.port,
                 users=selected_users,
+                auth_mode=args.auth,
             )
         except KeyboardInterrupt:
             print("\n[Termlit] Shutting down.")

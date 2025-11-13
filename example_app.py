@@ -8,7 +8,7 @@ termlit.welcome(
 
 while True:
     prompt = termlit.input("使用者提問: ")
-    
+
     if prompt.lower() in {"quit", "exit"}:
         termlit.goodbye("再見！期待下次")
         break
