@@ -1,53 +1,34 @@
 """
-檔案目錄服務啟動器 - 同時啟動 FastAPI、Telnet 和 SSH 服務器
+檔案目錄服務啟動器 - 啟動 Telnet 與 SSH 服務器，需自行提供 FastAPI 後端
 """
 import os
 import sys
 import time
 import threading
 import subprocess
-from pathlib import Path
 
-def start_fastapi_server():
-    """啟動 FastAPI 服務器"""
-    print("正在啟動 FastAPI 服務器...")
-    
-    try:
-        # 導入並啟動 FastAPI 服務器
-        from fastapi_server import start_server
-        start_server(host="127.0.0.1", port=8000)
-    except ImportError as e:
-        print(f"導入 FastAPI 服務器失敗: {e}")
-        print("請確認已安裝所需的依賴套件: pip install -r requirements.txt")
-    except Exception as e:
-        print(f"啟動 FastAPI 服務器時發生錯誤: {e}")
 
-def start_telnet_server():
+def start_telnet_server(host: str, port: int, fastapi_url: str):
     """啟動 Telnet 服務器"""
-    print("等待 FastAPI 服務器啟動...")
-    time.sleep(3)  # 等待 FastAPI 服務器完全啟動
-    
-    print("正在啟動 Telnet 服務器...")
+    print(f"正在啟動 Telnet 服務器 (FastAPI 後端: {fastapi_url})...")
     
     try:
-        from telnet_server import start_telnet_server
-        start_telnet_server(host="127.0.0.1", port=2323, fastapi_url="http://127.0.0.1:8000")
+        from telnet_server import start_telnet_server as telnet_entry
+        telnet_entry(host=host, port=port, fastapi_url=fastapi_url)
     except ImportError as e:
         print(f"導入 Telnet 服務器失敗: {e}")
         print("請確認已安裝所需的依賴套件")
     except Exception as e:
         print(f"啟動 Telnet 服務器時發生錯誤: {e}")
 
-def start_ssh_server():
+
+def start_ssh_server(host: str, port: int, fastapi_url: str):
     """啟動 SSH 服務器"""
-    print("等待 FastAPI 服務器啟動...")
-    time.sleep(3)  # 等待 FastAPI 服務器完全啟動
-    
-    print("正在啟動 SSH 服務器 (純文字版)...")
+    print(f"正在啟動 SSH 服務器 (FastAPI 後端: {fastapi_url})...")
     
     try:
         from ssh_server_plain import SSHServer
-        ssh_server = SSHServer(host="0.0.0.0", port=2222, fastapi_url="http://127.0.0.1:8000")
+        ssh_server = SSHServer(host=host, port=port, fastapi_url=fastapi_url)
         ssh_server.start()
     except ImportError as e:
         print(f"導入 SSH 服務器失敗: {e}")
@@ -57,7 +38,7 @@ def start_ssh_server():
 
 def check_dependencies():
     """檢查必要的依賴套件"""
-    required_packages = ["fastapi", "uvicorn", "requests"]
+    required_packages = ["requests", "rich"]
     optional_packages = {"paramiko": "SSH 功能"}
     missing_packages = []
     missing_optional = []
@@ -91,11 +72,15 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(description="檔案目錄服務啟動器")
-    parser.add_argument("--mode", choices=["all", "api-only", "telnet", "ssh"], 
+    parser.add_argument("--mode", choices=["all", "telnet", "ssh"], 
                        default="all", help="啟動模式 (預設: all)")
     parser.add_argument("--ssh-port", type=int, default=2222, help="SSH 埠號 (預設: 2222)")
     parser.add_argument("--telnet-port", type=int, default=2323, help="Telnet 埠號 (預設: 2323)")
-    parser.add_argument("--api-port", type=int, default=8000, help="FastAPI 埠號 (預設: 8000)")
+    parser.add_argument(
+        "--fastapi-url",
+        default="http://127.0.0.1:8000",
+        help="FastAPI 服務器 URL（請自行啟動）"
+    )
     
     args = parser.parse_args()
     
@@ -112,9 +97,7 @@ def main():
     
     services_info = []
     
-    if args.mode in ["all", "api-only"]:
-        services_info.append(f"FastAPI 服務器: http://127.0.0.1:{args.api_port}")
-        services_info.append(f"API 文檔: http://127.0.0.1:{args.api_port}/docs")
+    services_info.append(f"FastAPI 後端 (自行提供): {args.fastapi_url}")
     
     if args.mode in ["all", "telnet"]:
         services_info.append(f"Telnet 服務器: 127.0.0.1:{args.telnet_port}")
@@ -127,21 +110,23 @@ def main():
     for info in services_info:
         print(info)
     
+    print("\n請先啟動 FastAPI 服務器，或指定現有的 --fastapi-url 供 Telnet/SSH 使用")
+    
     print("\n按 Ctrl+C 停止所有服務\n")
     
     try:
         threads = []
         
-        # 啟動 FastAPI 服務器 (SSH 和 Telnet 都需要它)
-        if args.mode in ["all", "api-only", "telnet", "ssh"]:
-            fastapi_thread = threading.Thread(target=start_fastapi_server)
-            fastapi_thread.daemon = True
-            fastapi_thread.start()
-            threads.append(fastapi_thread)
-        
         # 啟動 Telnet 服務器
         if args.mode in ["all", "telnet"]:
-            telnet_thread = threading.Thread(target=start_telnet_server)
+            telnet_thread = threading.Thread(
+                target=start_telnet_server,
+                kwargs={
+                    "host": "127.0.0.1",
+                    "port": args.telnet_port,
+                    "fastapi_url": args.fastapi_url,
+                },
+            )
             telnet_thread.daemon = True
             telnet_thread.start()
             threads.append(telnet_thread)
@@ -150,7 +135,14 @@ def main():
         if args.mode in ["all", "ssh"]:
             try:
                 import paramiko
-                ssh_thread = threading.Thread(target=start_ssh_server)
+                ssh_thread = threading.Thread(
+                    target=start_ssh_server,
+                    kwargs={
+                        "host": "0.0.0.0",
+                        "port": args.ssh_port,
+                        "fastapi_url": args.fastapi_url,
+                    },
+                )
                 ssh_thread.daemon = True
                 ssh_thread.start()
                 threads.append(ssh_thread)

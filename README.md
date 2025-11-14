@@ -85,6 +85,7 @@ if __name__ == "__main__":
 - `termlit/session.py` – public helper implementations.
 - `termlit/runtime.py` – SSH server + script runner.
 - `termlit/cli.py` – command line interface (`termlit run`).
-- `termlit/ssh_server_plain.py`, `termlit/telnet_server.py` – original demo servers (optional utilities).
+- `termlit/ssh_server_plain.py`, `termlit/telnet_server.py` – original demo servers (optional utilities; they call an external FastAPI backend that you must run yourself).
+- `termlit/start_services.py` – helper script that starts the Telnet/SSH demos and forwards the `--fastapi-url` you provide.
 
 Happy terminal building!
