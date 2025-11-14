@@ -377,18 +377,22 @@ def post(
         resolved_headers["Authorization"] = chosen_header
     elif isinstance(chosen_header, dict):
         resolved_headers = dict(chosen_header)
-
-    response = requests.post(
-        url,
-        headers=resolved_headers,  # type: ignore[arg-type]
-        data=data,
-        json=json,
-        timeout=timeout,
-    )
-    if log:
-        summary = (
-            f"POST {url} -> {response.status_code} "
-            f"({len(response.content)} bytes)"
+    
+    try:
+        response = requests.post(
+            url,
+            headers=resolved_headers,  # type: ignore[arg-type]
+            data=data,
+            json=json,
+            timeout=timeout,
         )
-        session.send(summary)
+        if log:
+            summary = (
+                f"POST {url} -> {response.status_code} "
+                f"({len(response.content)} bytes)"
+            )
+            session.send(summary)
+    except requests.RequestException as e:
+        session.send(f"[ERROR] {e}", newline=True)
+        raise
     return response
