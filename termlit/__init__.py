@@ -7,8 +7,18 @@ only has to import `termlit`, call a few helper functions, and run
 `termlit run app.py`.
 """
 
-from .session import input, welcome, write, post, goodbye, spinner  # noqa: F401
-from .runtime import run  # noqa: F401
+from .session import (
+    input,
+    welcome,
+    write,
+    post,
+    goodbye,
+    spinner,
+    upload_files,
+    upload_file,
+    download_cmd,
+)
+from .runtime import run
 
 __all__ = [
     "welcome",
@@ -18,4 +28,7 @@ __all__ = [
     "goodbye",
     "spinner",
     "run",
+    "upload_files",
+    "upload_file",
+    "download_cmd",
 ]

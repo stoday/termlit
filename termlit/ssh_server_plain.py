@@ -11,7 +11,11 @@ import threading
 import requests
 import paramiko
 import time
+import subprocess
+import shutil
 from datetime import datetime
+from pathlib import Path
+from typing import Iterable, Optional, Union
 from rich.console import Console
 from rich.text import Text
 from rich.panel import Panel
@@ -23,6 +27,9 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.insert(0, parent_dir)
 
+REPO_ROOT = Path(parent_dir).resolve()
+DEFAULT_UPLOAD_DIR = REPO_ROOT / "upload_files"
+
 class SSHShell(paramiko.ServerInterface):
     """SSH Shell 處理器 - 純文字版"""
     
@@ -32,6 +39,7 @@ class SSHShell(paramiko.ServerInterface):
         self.fastapi_url = fastapi_url
         self.current_path = "C:\\"
         self.channel = None
+        self.upload_dir = DEFAULT_UPLOAD_DIR
     
     def check_auth_password(self, username, password):
         """密碼認證"""
@@ -224,6 +232,13 @@ class SSHShell(paramiko.ServerInterface):
             elif cmd == 'info':
                 path = parts[1] if len(parts) > 1 else self.current_path
                 self.show_file_info(path)
+            elif cmd in ['upload', 'upload_file']:
+                if len(parts) < 2:
+                    self.upload_file("")
+                elif len(parts) == 2:
+                    self.upload_file(parts[1])
+                else:
+                    self.upload_file(parts[1:])
             elif cmd == 'clear':
                 self.clear_screen()
             elif cmd in ['quit', 'exit']:
@@ -250,6 +265,8 @@ class SSHShell(paramiko.ServerInterface):
                 "status            - 顯示伺服器狀態\r\n"
                 "drives            - 顯示磁碟機 (Windows)\r\n"
                 "info <路徑>       - 顯示檔案資訊 (例: info setup.py)\r\n"
+                "upload_file <檔案...>\r\n"
+                "                  - 將一或多個檔案複製到 upload_files 目錄\r\n"
                 "clear             - 清除螢幕\r\n"
                 "quit/exit         - 斷開連接\r\n"
                 "=========================\r\n"
@@ -265,6 +282,122 @@ class SSHShell(paramiko.ServerInterface):
             # 回退版本
             fallback_text = "Help: ls, cd, pwd, whoami, status, drives, info, clear, quit\r\n"
             self.channel.send(fallback_text.encode('utf-8'))
+    
+    def upload_file(self, source: Union[str, Iterable[str]]):
+        """使用 scp 將檔案複製到 upload_files 目錄，可一次處理多個路徑"""
+        
+        def _format_size(num: int) -> str:
+            if num > 1024 * 1024:
+                return f"{num / (1024 * 1024):.1f} MB"
+            if num > 1024:
+                return f"{num / 1024:.1f} KB"
+            return f"{num} B"
+        
+        def _prepare_path(path_value: str) -> Optional[str]:
+            cleaned = path_value.strip().strip('"').strip("'")
+            if not cleaned:
+                return None
+            if not os.path.isabs(cleaned):
+                cleaned = os.path.normpath(os.path.join(self.current_path, cleaned))
+            else:
+                cleaned = os.path.normpath(cleaned)
+            return cleaned
+        
+        def _copy_single(path_value: str) -> bool:
+            normalized = _prepare_path(path_value or "")
+            if not normalized:
+                self.safe_send("請提供要上傳的檔案路徑")
+                return False
+            if not os.path.exists(normalized):
+                self.safe_send(f"找不到指定檔案: {normalized}")
+                return False
+            if os.path.isdir(normalized):
+                self.safe_send("目前僅支援上傳單一檔案，請提供檔案而非資料夾")
+                return False
+            
+            try:
+                self.upload_dir.mkdir(parents=True, exist_ok=True)
+            except Exception as exc:
+                self.safe_send(f"無法建立 upload_files 資料夾: {exc}")
+                return False
+            
+            dest_path = self.upload_dir / os.path.basename(normalized)
+            stem, suffix = dest_path.stem, dest_path.suffix
+            counter = 1
+            while dest_path.exists():
+                dest_path = self.upload_dir / f"{stem}_{counter}{suffix}"
+                counter += 1
+            
+            try:
+                result = subprocess.run(
+                    ["scp", normalized, str(dest_path)],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                stderr = (result.stderr or "").strip()
+                if stderr:
+                    print(f"SCP 輸出: {stderr}")
+            except FileNotFoundError:
+                try:
+                    shutil.copy2(normalized, dest_path)
+                    size_info = dest_path.stat().st_size
+                    self.safe_send(
+                        "系統找不到 scp，已改用內建複製流程完成。\r\n"
+                        f"檔案位置: {dest_path}\r\n"
+                        f"大小: {_format_size(size_info)}"
+                    )
+                    return True
+                except Exception as exc:
+                    self.safe_send(f"無法複製檔案: {exc}")
+                    return False
+            except subprocess.CalledProcessError as exc:
+                message = (exc.stderr or exc.stdout or str(exc)).strip()
+                self.safe_send(f"scp 傳輸失敗: {message or '未知錯誤'}")
+                if dest_path.exists():
+                    try:
+                        dest_path.unlink()
+                    except OSError:
+                        pass
+                return False
+            
+            size_info = dest_path.stat().st_size
+            response = (
+                f"已使用 scp 將檔案複製到: {dest_path}\r\n"
+                f"大小: {_format_size(size_info)}"
+            )
+            self.safe_send(response)
+            return True
+        
+        if isinstance(source, str):
+            cleaned = source.strip()
+            if not cleaned:
+                self.safe_send("使用方式: upload_file <來源檔案> [更多檔案...]")
+                return
+            _copy_single(cleaned)
+            return
+        
+        try:
+            items = list(source)
+        except TypeError:
+            self.safe_send("參數格式錯誤：請提供字串或字串列表")
+            return
+        
+        if not items:
+            self.safe_send("請提供至少一個檔案路徑")
+            return
+        
+        success = 0
+        total = len(items)
+        for path_value in items:
+            if isinstance(path_value, str):
+                if _copy_single(path_value):
+                    success += 1
+            else:
+                self.safe_send(f"忽略不支援的路徑型別: {path_value!r}")
+        
+        if total > 1:
+            self.safe_send(f"多檔案傳輸完成: {success}/{total} 個成功")
     
     def list_directory(self, path: str):
         """列出目錄"""
