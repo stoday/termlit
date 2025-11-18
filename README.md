@@ -70,6 +70,23 @@ them over SSH via `termlit run app.py`.
 - `--allow-anonymous`: accept any username/password combo.
 - `--reload`: watch the target script and restart the SSH server whenever it changes (development helper).
 - `--host` / `--port`: where the SSH server listens.
+- `--version`: display the installed Termlit version and exit.
+
+## Streaming output
+When you already have a generator/iterable that yields text chunks (for example,
+tailing logs or chunked API responses), call `termlit.write(..., stream=True)`
+to forward each chunk immediately without buffering:
+
+```python
+def stream_logs():
+    for line in follow_log_file():
+        yield line
+
+termlit.write(stream_logs(), stream=True)
+```
+Strings/bytes are still treated as a single chunk, so you can safely switch the
+flag on even when a function sometimes returns plain text and sometimes returns
+an iterator.
 
 ## Programmatic usage
 You can also embed Termlit inside a Python process:

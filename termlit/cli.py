@@ -9,6 +9,7 @@ from typing import Dict, List
 
 AUTH_MODES = ("ssh", "none")
 
+from . import __version__
 from .runtime import serve_script, serve_script_with_reloader
 
 
@@ -30,6 +31,12 @@ def _parse_users(raw_entries: List[str]) -> Dict[str, str]:
 
 def main(argv: List[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="termlit", description="Termlit CLI")
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
+        help="Show Termlit version and exit.",
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     run_parser = subparsers.add_parser(

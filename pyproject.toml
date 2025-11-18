@@ -16,6 +16,7 @@ termlit = "termlit.cli:main"
 [tool.uv.workspace]
 members = [
     ".",
+    ".",
 ]
 
 [tool.uv.sources]

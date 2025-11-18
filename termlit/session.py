@@ -572,10 +572,45 @@ def input(
     return session.receive_line(prompt, allow_empty=allow_empty, hidden=hidden)
 
 
-def write(message: object) -> None:
-    """Write plain text output to the terminal."""
+def _iter_stream_chunks(message: object) -> Iterable[object]:
+    if isinstance(message, (str, bytes)):
+        yield message
+        return
+    try:
+        iterator = iter(message)  # type: ignore[arg-type]
+    except TypeError as exc:  # pragma: no cover - defensive
+        raise TypeError(
+            "stream=True expects an iterable of chunks or a string/bytes object."
+        ) from exc
+    for chunk in iterator:
+        yield chunk
+
+
+def write(message: object, *, stream: bool = False) -> None:
+    """Write plain text output to the terminal.
+
+    Args:
+        message: Text (or iterable of text chunks) to send.
+        stream: When True, treat ``message`` as an iterable and forward each
+            chunk as soon as it is produced. Strings/bytes are always handled
+            as single chunks to avoid per-character writes.
+    """
     session = _current_session()
-    session.send(str(message))
+    if not stream:
+        session.send(str(message))
+        return
+
+    last_chunk: Optional[str] = None
+    for chunk in _iter_stream_chunks(message):
+        if isinstance(chunk, bytes):
+            text = chunk.decode("utf-8", errors="ignore")
+        else:
+            text = str(chunk)
+        session.send(text, newline=False)
+        last_chunk = text
+
+    if last_chunk is None or not last_chunk.endswith("\n"):
+        session.send("")
 
 
 def goodbye(message: object = "再見！") -> None:

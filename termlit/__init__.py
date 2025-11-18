@@ -7,6 +7,8 @@ only has to import `termlit`, call a few helper functions, and run
 `termlit run app.py`.
 """
 
+from importlib import metadata as importlib_metadata
+
 from .session import (
     input,
     welcome,
@@ -20,6 +22,11 @@ from .session import (
 )
 from .runtime import run
 
+try:
+    __version__ = importlib_metadata.version("termlit")
+except importlib_metadata.PackageNotFoundError:  # pragma: no cover - fallback when uninstalled
+    __version__ = "0.0.0+unknown"
+
 __all__ = [
     "welcome",
     "input",
@@ -31,4 +38,5 @@ __all__ = [
     "upload_files",
     "upload_file",
     "download_cmd",
+    "__version__",
 ]
