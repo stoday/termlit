@@ -661,6 +661,7 @@ def upload_files(
     log: bool = True,
     file_or_files: Union[PathInput, Iterable[PathInput], None] = None,
     show_progress: bool = False,
+    replace: bool = False,
 ) -> List[Path]:
     """
     Copy one or more files into the Termlit ``upload_files`` directory.
@@ -672,6 +673,9 @@ def upload_files(
             ``$TERMLIT_UPLOAD_DIR`` or ``./upload_files`` is used.
         log: Whether to emit a short status line for each uploaded file.
         show_progress: Stream simple percentage updates (per file) to the SSH session.
+        replace: When ``True`` reuse the original filenames even if they already
+            exist (overwriting the previous copy). Defaults to ``False`` which
+            auto-appends suffixes to avoid collisions.
 
     Returns:
         A list of paths representing the copied files on the server.
@@ -692,7 +696,10 @@ def upload_files(
     uploaded: List[Path] = []
     for raw in paths:
         source_path = _resolve_source_path(raw)
-        dest_path = _unique_destination(dest_dir, source_path.name)
+        if replace:
+            dest_path = dest_dir / source_path.name
+        else:
+            dest_path = _unique_destination(dest_dir, source_path.name)
         _copy_with_progress(session, source_path, dest_path, show_progress)
         uploaded.append(dest_path)
         if log:
@@ -707,6 +714,7 @@ def upload_file(
     destination_dir: Optional[PathInput] = None,
     log: bool = True,
     show_progress: bool = False,
+    replace: bool = False,
 ) -> Union[Path, List[Path]]:
     """
     Convenience wrapper around :func:`upload_files`.
@@ -714,6 +722,8 @@ def upload_file(
     Accepts either a single file path or an iterable of paths. When multiple
     paths are provided the returned value matches :func:`upload_files`.
     Set ``show_progress=True`` to stream percentage updates for each copy.
+    Pass ``replace=True`` to overwrite files with identical names instead of
+    auto-generating unique filenames.
     
     returns:
         A single Path if a single file was provided, or a list of Paths
@@ -724,6 +734,7 @@ def upload_file(
         destination_dir=destination_dir,
         log=log,
         show_progress=show_progress,
+        replace=replace,
     )
     if len(uploaded) == 1:
         return uploaded[0]

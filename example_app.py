@@ -56,7 +56,7 @@ while True:
     with termlit.spinner("dots", "正在處理您的問題..."):
         response = termlit.post(
             url="https://httpbin.org/post",
-            json={"question": prompt},
+            json={"question": prompt + '-aaa'},
             log=False,
         )
         

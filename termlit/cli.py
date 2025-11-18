@@ -9,7 +9,7 @@ from typing import Dict, List
 
 AUTH_MODES = ("ssh", "none")
 
-from .runtime import serve_script
+from .runtime import serve_script, serve_script_with_reloader
 
 
 def _parse_users(raw_entries: List[str]) -> Dict[str, str]:
@@ -56,6 +56,11 @@ def main(argv: List[str] | None = None) -> None:
         action="store_true",
         help="Allow any username/password (disables default accounts).",
     )
+    run_parser.add_argument(
+        "--reload",
+        action="store_true",
+        help="Watch the target script and restart the server when it changes.",
+    )
 
     args = parser.parse_args(argv)
 
@@ -74,8 +79,9 @@ def main(argv: List[str] | None = None) -> None:
             users = _parse_users(args.user)
             selected_users = {} if args.allow_anonymous else users or None
 
+        serve_fn = serve_script_with_reloader if args.reload else serve_script
         try:
-            serve_script(
+            serve_fn(
                 script_path,
                 host=args.host,
                 port=args.port,

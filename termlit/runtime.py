@@ -5,11 +5,13 @@ Runtime utilities for serving Termlit apps over SSH.
 from __future__ import annotations
 
 import io
+import multiprocessing
 import os
 import runpy
 import socket
 import sys
 import threading
+import time
 import traceback
 from contextlib import contextmanager
 from pathlib import Path
@@ -322,3 +324,118 @@ def serve_script(
         auth_mode=auth_mode,
     )
     server.serve_forever()
+
+
+def serve_script_with_reloader(
+    script_path: Path,
+    *,
+    host: str = "0.0.0.0",
+    port: int = 2222,
+    users: Optional[Dict[str, str]] = None,
+    auth_mode: str = "ssh",
+    poll_interval: float = 0.5,
+) -> None:
+    """Start the SSH server and restart it whenever the script file changes."""
+
+    script_path = Path(script_path).resolve()
+    current_mtime = _script_mtime(script_path)
+    print(f"[Termlit] Auto-reload enabled for {script_path}")
+
+    process: Optional[multiprocessing.Process] = _spawn_script_process(
+        script_path, host=host, port=port, users=users, auth_mode=auth_mode
+    )
+
+    try:
+        while True:
+            time.sleep(poll_interval)
+            new_mtime = _script_mtime(script_path)
+            if new_mtime != current_mtime:
+                current_mtime = new_mtime
+                print("[Termlit] Detected changes. Reloading...")
+                process = _restart_process(
+                    process,
+                    script_path,
+                    host=host,
+                    port=port,
+                    users=users,
+                    auth_mode=auth_mode,
+                )
+                continue
+
+            if process is None:
+                continue
+
+            if not process.is_alive():
+                exit_code = process.exitcode or 0
+                if exit_code == 0:
+                    return
+                print(
+                    "[Termlit] Server exited with errors. Waiting for file changes to restart..."
+                )
+                process.join()
+                process = None
+    except KeyboardInterrupt:
+        print("\n[Termlit] Reload loop interrupted. Shutting down...")
+    finally:
+        if process:
+            if process.is_alive():
+                process.terminate()
+            process.join()
+
+
+def _script_mtime(script_path: Path) -> int:
+    try:
+        return script_path.stat().st_mtime_ns
+    except FileNotFoundError:
+        return 0
+
+
+def _spawn_script_process(
+    script_path: Path,
+    *,
+    host: str,
+    port: int,
+    users: Optional[Dict[str, str]],
+    auth_mode: str,
+) -> multiprocessing.Process:
+    process = multiprocessing.Process(
+        target=_serve_script_subprocess,
+        args=(str(script_path), host, port, users, auth_mode),
+        daemon=True,
+    )
+    process.start()
+    return process
+
+
+def _restart_process(
+    process: Optional[multiprocessing.Process],
+    script_path: Path,
+    *,
+    host: str,
+    port: int,
+    users: Optional[Dict[str, str]],
+    auth_mode: str,
+) -> multiprocessing.Process:
+    if process:
+        if process.is_alive():
+            process.terminate()
+        process.join()
+    return _spawn_script_process(
+        script_path, host=host, port=port, users=users, auth_mode=auth_mode
+    )
+
+
+def _serve_script_subprocess(
+    script_path: str,
+    host: str,
+    port: int,
+    users: Optional[Dict[str, str]],
+    auth_mode: str,
+) -> None:
+    serve_script(
+        Path(script_path),
+        host=host,
+        port=port,
+        users=users,
+        auth_mode=auth_mode,
+    )

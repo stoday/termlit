@@ -56,7 +56,7 @@ them over SSH via `termlit run app.py`.
    > 需要輸入密碼時可使用 `termlit.input("input password: ", hidden=True)` 來以 `*` 遮罩輸入。
 3. Serve it over SSH:
    ```bash
-   termlit run app.py --host 0.0.0.0 --port 2222
+   termlit run app.py --host 0.0.0.0 --port 2222 --reload
    ```
    > 加上 `--auth none` 可讓使用者免密碼登入（預設為 `--auth ssh` 需輸入密碼）。
 4. Connect from any SSH client (default credentials `admin/password123`):
@@ -68,6 +68,7 @@ them over SSH via `termlit run app.py`.
 - `--user name=secret`: add/override login credentials (repeatable).
 - `--auth {ssh,none}`: choose between password-protected (`ssh`) or passwordless (`none`) sessions.
 - `--allow-anonymous`: accept any username/password combo.
+- `--reload`: watch the target script and restart the SSH server whenever it changes (development helper).
 - `--host` / `--port`: where the SSH server listens.
 
 ## Programmatic usage
@@ -126,6 +127,9 @@ All files are copied into `upload_files/` relative to where `termlit run` was
 executed (override via the `TERMLIT_UPLOAD_DIR` environment variable or the
 ``destination_dir`` argument). Pass `show_progress=True` to stream simple
 percentage updates back to the SSH client while a file is being copied. Use
+``replace=True`` when you want to overwrite same-named files instead of letting
+Termlit append `_1`, `_2`, ... suffixes (the default collision-avoidance
+behaviour). Use
 `termlit.download_cmd(...)` to generate the scp command your users should run
 locally, pass ``source_dir="upload_files"`` when you want to specify the hosting
 folder, or set ``type="http"`` to spin up a temporary `http.server` over the
@@ -162,3 +166,14 @@ to guide end users through downloading the artifacts:
 - `termlit/start_services.py` – helper script that starts the Telnet/SSH demos and forwards the `--fastapi-url` you provide.
 
 Happy terminal building!
+
+## 開發者程式概覽
+- `termlit/__init__.py`：集中 re-export Termlit 公開 API（welcome、input、upload_file...），也在匯入時載入版本資訊與 thread-local session 綁定。
+- `termlit/session.py`：Session 層主程式，實作所有對外 helper（UI、HTTP、上傳/下載等），並維護 `_current_session`、檔案複製、HTTP 下載服務等細節。
+- `termlit/runtime.py`：啟動/管理 SSH 伺服器與 ScriptRunner，並提供 `serve_script_with_reloader` 的 watchdog 流程；同時處理 Paramiko server interface 與 stdout 轉導。
+- `termlit/cli.py`：`termlit` 指令的進入點，解析 `termlit run` 旗標、管理授權設定並呼叫 runtime。
+- `example_app.py`：內建範例，展示如何建立 Termlit 流程、上傳檔案以及和 HTTP API 互動。
+- `termlit/ssh_server_plain.py` / `termlit/telnet_server.py`：較早期的互動式 demo 伺服器，提供自建命令列介面並透過外部 FastAPI 後端提供應答。
+- `termlit/start_services.py`：方便一次啟動 telnet/ssh demo 並將 `--fastapi-url` 轉給兩端。
+- `tests/`：單元/整合測試樣本；新增功能時請補上覆蓋相關 helper 或 runtime 的測試。
+- `upload_files/`：預設的伺服器端上傳輸出資料夾（可透過 `TERMLIT_UPLOAD_DIR` 覆寫），便於從本機取得 Termlit Session 中產生的檔案。
