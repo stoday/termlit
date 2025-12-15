@@ -1,8 +1,7 @@
 [project]
 name = "termlit"
 version = "0.2.1"
-description = "Termlit converts a plain Python script into an interactive SSH experience.
-Write terminal flows with welcome, input, and post helpers, then expose them over SSH via termlit run"
+description = "Termlit converts a plain Python script into an interactive SSH experience. Write terminal flows with welcome, input, and post helpers, then expose them over SSH via termlit run"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name="stoday", email="stoday@gmail.com" }]
