@@ -197,7 +197,7 @@ class TermlitSSHServer:
             return key
         except Exception:
             # Fall back to an in-memory key if disk operations fail.
-            print("[Termlit] 無法存取金鑰檔案，使用暫時性金鑰。")
+            print("[Termlit] Cannot access key file, using temporary key.")
             return paramiko.RSAKey.generate(2048)
 
     def serve_forever(self) -> None:

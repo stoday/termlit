@@ -36,7 +36,8 @@ class SessionNotReady(RuntimeError):
 _session_local: threading.local = threading.local()
 
 UPLOAD_DIR_ENV = "TERMLIT_UPLOAD_DIR"
-DEFAULT_UPLOAD_DIRNAME = "upload_files"
+# DEFAULT_UPLOAD_DIRNAME = "upload_files"
+DEFAULT_UPLOAD_DIRNAME = "."
 DOWNLOAD_HOST_ENV = "TERMLIT_DOWNLOAD_HOST"
 DOWNLOAD_PORT_ENV = "TERMLIT_DOWNLOAD_PORT"
 DOWNLOAD_USER_ENV = "TERMLIT_DOWNLOAD_USER"
@@ -613,7 +614,7 @@ def write(message: object, *, stream: bool = False) -> None:
         session.send("")
 
 
-def goodbye(message: object = "再見！") -> None:
+def goodbye(message: object = "Goodbye！") -> None:
     """Close the session with a friendly farewell."""
     session = _current_session()
     session.send(str(message))
@@ -735,6 +736,17 @@ def upload_files(
             dest_path = dest_dir / source_path.name
         else:
             dest_path = _unique_destination(dest_dir, source_path.name)
+
+        if dest_path.exists() and source_path.resolve() == dest_path.resolve():
+            if log:
+                size_text = _format_size(source_path.stat().st_size)
+                session.send(
+                    f"[UPLOAD] {source_path} is already located at {dest_path} "
+                    f"({size_text}) - skipped self-copy."
+                )
+            uploaded.append(dest_path)
+            continue
+
         _copy_with_progress(session, source_path, dest_path, show_progress)
         uploaded.append(dest_path)
         if log:
@@ -844,7 +856,7 @@ def download_cmd(
     local_files = [_resolve_existing_file(p) for p in combined_paths]
     parents = {f.parent for f in local_files}
     if len(parents) != 1:
-        raise ValueError("HTTP 下載僅支援同一資料夾內的檔案，請先集中到同一路徑。")
+        raise ValueError("HTTP 下載僅支援同一資料夾內的檔案，請先集中到同一Path。")
     directory = parents.pop()
     port_value = port
     http_port = _ensure_http_server(directory, port_value)
