@@ -10,7 +10,7 @@ from typing import Dict, List
 AUTH_MODES = ("ssh", "none")
 
 from . import __version__
-from .runtime import serve_script, serve_script_with_reloader
+from .runtime import run_local_script, serve_script, serve_script_with_reloader
 
 
 def _parse_users(raw_entries: List[str]) -> Dict[str, str]:
@@ -68,6 +68,11 @@ def main(argv: List[str] | None = None) -> None:
         action="store_true",
         help="Watch the target script and restart the server when it changes.",
     )
+    run_parser.add_argument(
+        "--local",
+        action="store_true",
+        help="Run the script locally without starting an SSH server.",
+    )
 
     args = parser.parse_args(argv)
 
@@ -75,6 +80,10 @@ def main(argv: List[str] | None = None) -> None:
         script_path = Path(args.script).expanduser().resolve()
         if not script_path.exists():
             parser.error(f"Script not found: {script_path}")
+
+        if args.local:
+            run_local_script(script_path)
+            return
 
         if args.auth == "none":
             if args.user:
