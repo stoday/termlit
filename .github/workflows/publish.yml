@@ -23,6 +23,9 @@ jobs:
       - name: Remove previous dist
         run: rm -rf dist
 
+      - name: Remove previous dist
+        run: rm -rf dist
+
       - name: Build distributions
         run: python -m build
 
