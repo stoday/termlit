@@ -473,6 +473,7 @@ class LocalSession:
         allow_empty: bool = True,
         hidden: bool = False,
     ) -> str:
+        import builtins
         import getpass
 
         while True:
@@ -480,7 +481,7 @@ class LocalSession:
                 if hidden:
                     line = getpass.getpass(prompt)
                 else:
-                    line = input(prompt)
+                    line = builtins.input(prompt)
             except EOFError:
                 return ""
             if line or allow_empty:
