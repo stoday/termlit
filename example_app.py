@@ -9,7 +9,7 @@ termlit.welcome(
 while True:
     prompt = termlit.input("User question: ")
 
-    if prompt.lower() in {"quit", "exit"}:
+    if prompt.lower() in {"quit", "exit", "bye"}:
         termlit.goodbye("Goodbye! See you next time")
         break
     elif prompt.strip() == "upload":
@@ -59,5 +59,11 @@ while True:
             json={"question": prompt + '-aaa'},
             log=False,
         )
-        
-    termlit.write('Answer: ' + str(response.json()))
+    termlit.write("---")
+    termlit.write("Your question: " + prompt + '\n')
+    termlit.write("Response from server:")
+    try:
+        termlit.write('Answer: ' + str(response.json()) + '\n')
+    except Exception:
+        termlit.write("Failed to parse response as JSON." + '\n')
+        breakpoint()

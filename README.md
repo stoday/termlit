@@ -1,7 +1,7 @@
 # termlit
-Termlit converts a plain Python script into an interactive SSH experience.  
-Write terminal flows with `welcome`, `input`, and `post` helpers, then expose
-them over SSH via `termlit run app.py`.
+Termlit is a small Python tool that provides an SSH server interface.
+It makes it easy to expose interactive applications over SSH — for example,
+to host AI-powered conversational services that users can connect to with an SSH client.
 
 ## Features
 - SSH server with ready-to-use credentials (or anonymous mode)
@@ -14,6 +14,26 @@ them over SSH via `termlit run app.py`.
   `upload_files/` directory so you can retrieve them easily
 - Download helpers (`termlit.download_cmd`) that generate ready-to-run scp
   commands or temporary HTTP links for your end users
+
+## Installation
+
+Two common installation methods are shown below:
+
+- From PyPI (recommended for end users):
+
+```bash
+python -m pip install termlit
+```
+
+- From GitHub (editable / development install):
+
+```bash
+git clone https://github.com/stoday/termlit.git
+cd termlit
+python -m pip install -e .
+```
+
+The editable install makes it easy to modify code and test changes locally.
 
 ## Quick start
 1. Install the package (editable mode during development is fine):
@@ -51,23 +71,40 @@ them over SSH via `termlit run app.py`.
 
        termlit.write("Answer: " + str(response.json()))
    ```
-   > `termlit.spinner` blocks input by default, so users cannot queue input during wait.
-   > By default `termlit.input` ignores empty input, allow with `allow_empty=True`。
-   > 需要輸入Password時可使用 `termlit.input("input password: ", hidden=True)` for password input masked with `*`.
+    > `termlit.spinner` blocks input by default, so users cannot queue input while a background task is running.
+    > By default `termlit.input` ignores empty input; allow empty input with `allow_empty=True`.
+    > Use `termlit.input("input password: ", hidden=True)` when you need password input — the input will be masked with `*`.
 3. Serve it over SSH:
    ```bash
    termlit run app.py --host 0.0.0.0 --port 2222 --reload
    ```
-   > Add `--auth none` 可讓使用者免Password登入（預設為 `--auth ssh` 需輸入Password）。
+    > Add `--auth none` to allow passwordless login (the default is `--auth ssh`, which requires a password).
+   Or run it locally without SSH:
+   ```bash
+   termlit run app.py --local
+   ```
 4. Connect from any SSH client (default credentials `admin/password123`):
    ```bash
    ssh admin@127.0.0.1 -p 2222
    ```
 
+## Local mode
+If you want to run a Termlit app without starting an SSH server, add `--local`:
+
+```bash
+termlit run app.py --local
+```
+
+Notes:
+- Runs the app on your local terminal using stdin/stdout (no remote access).
+- `--host`, `--port`, `--auth`, `--user`, and `--allow-anonymous` are ignored in local mode.
+- Useful for quick iteration or single-user usage on the same machine.
+
 ## CLI flags
 - `--user name=secret`: add/override login credentials (repeatable).
 - `--auth {ssh,none}`: choose between password-protected (`ssh`) or passwordless (`none`) sessions.
 - `--allow-anonymous`: accept any username/password combo.
+- `--local`: run a script locally without starting an SSH server (use with `run`).
 - `--reload`: watch the target script and restart the SSH server whenever it changes (development helper).
 - `--host` / `--port`: where the SSH server listens.
 - `--version`: display the installed Termlit version and exit.
@@ -101,7 +138,7 @@ def app():
 if __name__ == "__main__":
     termlit.run(app, host="127.0.0.1", port=2222)
 ```
-> 需要免Password體驗時, 可傳入 `auth_mode="none"` 給 `termlit.run`.
+> To allow passwordless sessions, pass `auth_mode="none"` to `termlit.run`.
 
 ## Uploading files
 Use the `upload_files`/`upload_file` helpers when your script needs to drop
@@ -158,22 +195,23 @@ insufficient.
 Once your script calls `termlit.upload_file(...)`, you have two convenient ways
 to guide end users through downloading the artifacts:
 
-1. **scp 指令** – 呼叫 `termlit.download_cmd("report.pdf", source_dir="upload_files")`
-   generates string like `scp -P 2222 admin@<host>:/abs/path/report.pdf ./`. Copy this
-   command to user to run locally. Adjust host/port/user via env vars
-   `TERMLIT_DOWNLOAD_HOST`, `TERMLIT_DOWNLOAD_PORT`, `TERMLIT_DOWNLOAD_USER`
-   or override using `host=`, `port=`, `username=`,
-   `destination=`。
-2. **HTTP 下載** – 傳入 `type="http"`, e.g.
-   `termlit.download_cmd("report.pdf", source_dir="upload_files", type="http")`, 
-   starts `http.server` (default port `8765` use 
-   `TERMLIT_HTTP_PORT` 覆寫）, 並回傳 `http://<host>:8765/report.pdf` URL.
-   User downloads via browser; server access log is
-   自動抑制, 避免干擾 SSH 介面。
+1. **scp command** – Call `termlit.download_cmd("report.pdf", source_dir="upload_files")`
+    to generate a string like `scp -P 2222 admin@<host>:/abs/path/report.pdf ./`.
+    Give this command to your user to run locally. Adjust host/port/user via
+    env vars `TERMLIT_DOWNLOAD_HOST`, `TERMLIT_DOWNLOAD_PORT`,
+    `TERMLIT_DOWNLOAD_USER`, or override using `host=`, `port=`, `username=`,
+    `destination=`.
+2. **HTTP download** – Pass `type="http"`, for example
+    `termlit.download_cmd("report.pdf", source_dir="upload_files", type="http")`.
+    This starts a temporary `http.server` (default port `8765`, override with
+    `TERMLIT_HTTP_PORT`) and returns a URL like `http://<host>:8765/report.pdf`.
+    The user can download via a browser; server access logging is suppressed by
+    default to avoid interfering with the SSH interface.
 
-> HTTP 模式要求所有檔案在同一個資料夾, 可將檔案集中到 `upload_files/`
-> then generate link. Remind user to close temp HTTP server (restart app
-> or custom cmd) for security.
+> The HTTP mode requires all target files to be in the same folder—collect
+> them into `upload_files/` before generating a link. Remind users to stop the
+> temporary HTTP server (restart the app or run a custom command) after
+> downloading for security.
 
 ## Repository layout
 - `termlit/session.py` – public helper implementations.
@@ -185,12 +223,25 @@ to guide end users through downloading the artifacts:
 Happy terminal building!
 
 ## Developer Overview
-- `termlit/__init__.py`: 集中 re-export Termlit 公開 API（welcome、input、upload_file...）, 也在匯入時載入版本資訊與 thread-local session 綁定。
-- `termlit/session.py`: Session 層主程式, 實作所有對外 helper（UI、HTTP、上傳/下載等）, 並維護 `_current_session`, file copy, HTTP download service details.
-- `termlit/runtime.py`: 啟動/管理 SSH 伺服器與 ScriptRunner, 並提供 `serve_script_with_reloader` watchdog flow; handles Paramiko server interface and stdout redirection.
-- `termlit/cli.py`: `termlit` 指令的進入點, 解析 `termlit run` flags, manages auth settings and calls runtime.
-- `example_app.py`: 內建範例, 展示如何建立 Termlit 流程、上傳檔案以及和 HTTP API 互動。
-- `scripts/ssh_server_plain.py` / `scripts/telnet_server.py`: 較早期的互動式 demo 伺服器, 提供自建命令列介面並透過外部 FastAPI 後端提供應答。
-- `scripts/start_services.py`: 方便一次啟動 telnet/ssh demo 並將 `--fastapi-url` to both.
-- `tests/`: 單元/整合測試樣本；新增功能時請補上覆蓋相關 helper 或 runtime 的測試。
-- `upload_files/`: 預設的伺服器端上傳輸出資料夾（可透過 `TERMLIT_UPLOAD_DIR` 覆寫）, 便於從本機取得 Termlit Session 中產生的檔案。
+
+- `termlit/__init__.py`: Re-exports Termlit's public API (`welcome`,
+    `input`, `upload_file`, etc.). It also loads version information and binds
+    the thread-local session on import.
+- `termlit/session.py`: The session implementation that backs all public
+    helpers (UI, HTTP helpers, upload/download) and maintains the internal
+    `_current_session` state.
+- `termlit/runtime.py`: Starts and manages the SSH server and the script
+    runner; provides a reload/watchdog flow via `serve_script_with_reloader`.
+- `termlit/cli.py`: The CLI entrypoint for `termlit`; parses arguments for
+    `termlit run`, manages authentication options, and invokes the runtime.
+- `example_app.py`: An example app demonstrating how to build a Termlit flow,
+    upload files, and interact with an HTTP API.
+- `scripts/ssh_server_plain.py` / `scripts/telnet_server.py`: Legacy demo
+    servers that showcase an interactive shell and optional integration with an
+    external FastAPI backend.
+- `scripts/start_services.py`: A convenience helper to start the Telnet/SSH
+    demos and forward a common `--fastapi-url` to both services.
+- `tests/`: Unit and integration tests; please add tests covering new helpers
+    or runtime behavior when introducing features.
+- `upload_files/`: The default location for server-side uploaded artifacts
+    (override with `TERMLIT_UPLOAD_DIR`).

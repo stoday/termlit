@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import sys
 from dataclasses import dataclass
 from functools import partial
 from io import StringIO, TextIOBase
@@ -63,7 +64,8 @@ def _current_session() -> "TermlitSession":
     if session is None:
         raise SessionNotReady(
             "No active Termlit session. The helper functions can only be used "
-            "when a session is running inside `termlit run <script.py>`."
+            "when a session is running inside `termlit run <script.py>` or "
+            "`termlit --local <script.py>`."
         )
     return session
 
@@ -449,6 +451,45 @@ class TermlitSession:
                 break
 
 
+@dataclass
+class LocalSession:
+    """Local terminal session backed by stdin/stdout."""
+
+    username: str = "local"
+
+    def send(self, message: str = "", newline: bool = True) -> None:
+        if newline and not message.endswith("\n"):
+            message += "\n"
+        try:
+            sys.stdout.write(message)
+            sys.stdout.flush()
+        except Exception:
+            pass
+
+    def receive_line(
+        self,
+        prompt: str = "",
+        *,
+        allow_empty: bool = True,
+        hidden: bool = False,
+    ) -> str:
+        import getpass
+
+        while True:
+            try:
+                if hidden:
+                    line = getpass.getpass(prompt)
+                else:
+                    line = input(prompt)
+            except EOFError:
+                return ""
+            if line or allow_empty:
+                return line
+
+    def drain_input_buffer(self) -> None:
+        return
+
+
 class _SessionConsoleFile(TextIOBase):
     """Adapter so Rich can stream directly to the SSH channel."""
 
@@ -537,6 +578,7 @@ class SpinnerContext:
 
 def welcome(
     title: str,
+    panel_title: str = "Termlit",
     subtitle: Optional[str] = None,
     description: Optional[str] = None,
 ) -> None:
@@ -550,7 +592,7 @@ def welcome(
     if description:
         text.append(f"\n\n{description}", style="white")
 
-    panel = Panel(text, title="Termlit", border_style="bright_blue")
+    panel = Panel(text, title=panel_title, border_style="bright_blue")
     console.print(panel)
     session.send(console.file.getvalue(), newline=False)
 
@@ -571,6 +613,45 @@ def input(
     """
     session = _current_session()
     return session.receive_line(prompt, allow_empty=allow_empty, hidden=hidden)
+
+
+def input_multiline(
+    prompt: str,
+    *,
+    end_marker: str = ".",
+    allow_empty: bool = False,
+    hidden: bool = False,
+) -> str:
+    """
+    Read multiple lines of input from the user until a line equal to
+    ``end_marker`` is entered on its own line.
+
+    Note: SSH terminal clients do not send modifier key metadata (for example
+    Shift+Enter) as a distinct code, so it's not possible to reliably detect
+    Shift+Enter over an SSH session. This helper provides a simple and
+    portable alternative: the user types multiple lines and then enters the
+    configured ``end_marker`` alone on a line to finish.
+
+    Args:
+        prompt: Initial prompt shown to the user.
+        end_marker: A single-line sentinel that ends multiline input (default: `.`).
+        allow_empty: Passed to the underlying line reader for each line.
+        hidden: If True, each input line will be masked (rare for multiline usage).
+
+    Returns:
+        A single string containing the collected lines joined with ``\n``.
+    """
+    session = _current_session()
+    session.send(f"{prompt} (end with a line containing only '{end_marker}')")
+    lines: list[str] = []
+    while True:
+        line = session.receive_line(
+            "", allow_empty=allow_empty, hidden=hidden
+        )
+        if line == end_marker:
+            break
+        lines.append(line)
+    return "\n".join(lines)
 
 
 def _iter_stream_chunks(message: object) -> Iterable[object]:

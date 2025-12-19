@@ -19,7 +19,7 @@ from typing import Callable, Dict, Iterable, Optional, Protocol
 
 import paramiko
 
-from .session import TermlitSession, bind_session, unbind_session
+from .session import LocalSession, TermlitSession, bind_session, unbind_session
 
 
 DEFAULT_USERS = {"admin": "password123"}
@@ -324,6 +324,26 @@ def serve_script(
         auth_mode=auth_mode,
     )
     server.serve_forever()
+
+
+def run_local_script(script_path: Path) -> None:
+    """Run a Termlit script directly on the local terminal."""
+    runner = ScriptRunner(script_path)
+    username = (
+        os.environ.get("USER")
+        or os.environ.get("USERNAME")
+        or os.environ.get("LOGNAME")
+        or "local"
+    )
+    session = LocalSession(username=username)
+    bind_session(session)
+    try:
+        try:
+            runner.run()
+        except KeyboardInterrupt:
+            session.send("[Termlit] Session cancelled by user.")
+    finally:
+        unbind_session()
 
 
 def serve_script_with_reloader(
