@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import textwrap
 from pathlib import Path
 from typing import Dict, List
 
@@ -38,6 +39,15 @@ def main(argv: List[str] | None = None) -> None:
         help="Show Termlit version and exit.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    build_parser = subparsers.add_parser(
+        "build", help="Generate starter files (e.g. app.py)"
+    )
+    build_parser.add_argument(
+        "template",
+        choices=("app",),
+        help="Template to generate. Use 'app' to create app.py.",
+    )
 
     run_parser = subparsers.add_parser(
         "run", help="Serve a Termlit script over SSH (default command)"
@@ -75,6 +85,34 @@ def main(argv: List[str] | None = None) -> None:
     )
 
     args = parser.parse_args(argv)
+
+    if args.command == "build":
+        if args.template == "app":
+            target_path = Path.cwd() / "app.py"
+            if target_path.exists():
+                parser.error(f"{target_path} already exists.")
+            template = textwrap.dedent(
+                """\
+                import termlit
+
+                termlit.welcome(
+                    title="Welcome",
+                    subtitle="termlit build sample",
+                    description="A tiny loop that echoes your questions.",
+                )
+
+                while True:
+                    prompt = termlit.input("Ask something (type 'exit' to quit): ")
+                    if prompt.lower() in {"quit", "exit"}:
+                        termlit.goodbye("Goodbye!")
+                        break
+
+                    termlit.write(f"Answer: {prompt}")
+                """
+            )
+            target_path.write_text(template, encoding="utf-8")
+            print(f"[Termlit] Created {target_path}")
+        return
 
     if args.command == "run":
         script_path = Path(args.script).expanduser().resolve()

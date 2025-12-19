@@ -29,14 +29,7 @@ while True:
         if not targets:
             termlit.write("No file paths provided, cancelled.")
             continue
-        # method = termlit.input("Select download method (scp/http, default scp): ").strip().lower()
-        # method = method or "scp"
-        # base_dir = termlit.input(
-        #     "Specify server folder (e.g. upload_files), press Enter to skip: "
-        # ).strip()
-        # cmd_kwargs = {}
-        # if base_dir:
-        #     cmd_kwargs["source_dir"] = base_dir
+
         source_dir = "upload_files"
         try:
             cmd = termlit.download_cmd(
@@ -45,14 +38,12 @@ while True:
                 source_dir=source_dir,
             )
             termlit.write("Please open the following URL in browser to download:")
-            # if method == "http":
-            #     termlit.write("Please open the following URL in browser to download:")
-            # else:
-            #     termlit.write("Run the following command in local terminal to download:")
             termlit.write(cmd)
+            
         except (ValueError, FileNotFoundError, IsADirectoryError) as exc:
             termlit.write(f"Failed to generate download command: {exc}")
         continue
+    
     with termlit.spinner("dots", "Processing your request..."):
         response = termlit.post(
             url="https://httpbin.org/post",
