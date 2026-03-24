@@ -101,3 +101,31 @@ def test_welcome_renders_banner_tips_and_info_panel():
         assert "This is a note" in output
     finally:
         sess.unbind_session()
+
+
+def test_spinner_is_disabled_when_debugger_is_attached(monkeypatch):
+    ch = FakeChannel()
+    s = sess.TermlitSession(channel=ch, username="tester")
+    sess.bind_session(s)
+    monkeypatch.setattr(sess.sys, "gettrace", lambda: object())
+    try:
+        with sess.spinner("dots", "Processing your request..."):
+            sess.write("inside spinner")
+        output = "".join(_decoded_sent(ch))
+        assert "inside spinner" in output
+        assert "Processing your request..." not in output
+    finally:
+        sess.unbind_session()
+
+
+def test_spinner_uses_stdio_for_local_session(monkeypatch):
+    s = sess.LocalSession(username="tester")
+    sess.bind_session(s)
+    monkeypatch.setattr(sess.os, "name", "nt")
+    monkeypatch.setattr(sess.sys, "gettrace", lambda: None)
+    try:
+        ctx = sess.spinner("dots", "Processing your request...")
+        assert ctx.enabled is True
+        assert ctx.local_stdio is True
+    finally:
+        sess.unbind_session()

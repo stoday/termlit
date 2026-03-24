@@ -530,23 +530,37 @@ class SpinnerContext:
         text: str,
         persist: bool,
         lock_input: bool,
+        enabled: bool = True,
+        local_stdio: bool = False,
     ):
         self.session = session
         self.spinner = spinner
         self.text = text
         self.persist = persist
         self.lock_input = lock_input
-        self._console = Console(
-            file=_SessionConsoleFile(session),
-            force_terminal=True,
-            force_interactive=True,
-            color_system="truecolor",
-        )
+        self.enabled = enabled
+        self.local_stdio = local_stdio
+        if self.local_stdio:
+            self._console = Console(
+                file=sys.stdout,
+                force_terminal=True,
+                force_interactive=True,
+                color_system="truecolor",
+            )
+        else:
+            self._console = Console(
+                file=_SessionConsoleFile(session),
+                force_terminal=True,
+                force_interactive=True,
+                color_system="truecolor",
+            )
         self._status_cm = None
         self._stop = threading.Event()
         self._drain_thread: Optional[threading.Thread] = None
 
     def __enter__(self):
+        if not self.enabled:
+            return self
         self._stop.clear()
         self._status_cm = self._console.status(self.text, spinner=self.spinner)
         self._status_cm.__enter__()
@@ -556,6 +570,8 @@ class SpinnerContext:
         return self
 
     def __exit__(self, exc_type, exc, tb):
+        if not self.enabled:
+            return False
         self._stop.set()
         if self._drain_thread:
             self._drain_thread.join(timeout=0.2)
@@ -766,7 +782,20 @@ def spinner(
             ...
     """
     session = _current_session()
-    return SpinnerContext(session, name, text, persist, lock_input)
+    debugger_attached = bool(getattr(sys, "gettrace", lambda: None)())
+    local_session = isinstance(session, LocalSession)
+    # Rich live renderers and Pdb both manage terminal cursor state; when a
+    # debugger is attached we disable the live spinner to avoid frozen prompts.
+    enabled = not debugger_attached
+    return SpinnerContext(
+        session,
+        name,
+        text,
+        persist,
+        lock_input,
+        enabled=enabled,
+        local_stdio=local_session,
+    )
 
 
 def post(

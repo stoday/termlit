@@ -1,4 +1,5 @@
 import termlit
+import time
 
 termlit.welcome(
     title="Welcome~",
@@ -50,6 +51,7 @@ while True:
             json={"question": prompt + '-aaa'},
             log=False,
         )
+        time.sleep(2)
     termlit.write("---")
     termlit.write("Your question: " + prompt + '\n')
     termlit.write("Response from server:")
@@ -57,4 +59,3 @@ while True:
         termlit.write('Answer: ' + str(response.json()) + '\n')
     except Exception:
         termlit.write("Failed to parse response as JSON." + '\n')
-        breakpoint()
