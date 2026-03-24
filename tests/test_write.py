@@ -79,3 +79,25 @@ def test_write_stream_chunks_missing_final_newline_adds_one():
         assert sent[2] == "\r\n"
     finally:
         sess.unbind_session()
+
+
+def test_welcome_renders_banner_tips_and_info_panel():
+    ch = FakeChannel()
+    s = sess.TermlitSession(channel=ch, username="tester")
+    sess.bind_session(s)
+    try:
+        sess.welcome(
+            title="Welcome",
+            panel_title="Termlit",
+            subtitle="version 1.0.0",
+            description="This is a note",
+        )
+        output = "".join(_decoded_sent(ch))
+        assert "Tips for getting started:" in output
+        assert "Ask questions, edit files, or run commands." in output
+        assert "/help for more information." in output
+        assert "You are running " in output
+        assert "Termlit" in output
+        assert "This is a note" in output
+    finally:
+        sess.unbind_session()

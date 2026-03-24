@@ -222,6 +222,12 @@ to guide end users through downloading the artifacts:
 
 Happy terminal building!
 
+## Changelog
+
+### 0.4.0 (2026-03-24)
+- Bumped project version to `0.4.0`.
+- Synced the local lockfile package version to `0.4.0`.
+
 ## Developer Overview
 
 - `termlit/__init__.py`: Re-exports Termlit's public API (`welcome`,

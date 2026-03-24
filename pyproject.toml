@@ -1,6 +1,6 @@
 [project]
 name = "termlit"
-version = "0.3.1"
+version = "0.4.0"
 description = "Termlit is a small Python tool that provides an SSH server interface. It makes it easy to expose interactive applications over SSH — for example, to host AI-powered conversational services that users can connect to with an SSH client."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -14,6 +14,7 @@ classifiers = [
 ]
 dependencies = [
     "paramiko>=4.0.0",
+    "pyfiglet>=1.0.4",
     "requests>=2.32.5",
     "rich>=14.2.0",
 ]

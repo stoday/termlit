@@ -21,6 +21,11 @@ import time
 from typing import Dict, Iterable, List, Optional, TYPE_CHECKING, Union
 
 import requests
+try:
+    import pyfiglet
+except ImportError:  # pragma: no cover - optional at runtime, declared as a dependency
+    pyfiglet = None
+
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
@@ -45,6 +50,7 @@ DOWNLOAD_USER_ENV = "TERMLIT_DOWNLOAD_USER"
 HTTP_SERVER_PORT_ENV = "TERMLIT_HTTP_PORT"
 DEFAULT_SSH_PORT = 2222
 DEFAULT_HTTP_PORT = 8765
+WELCOME_GRADIENT_COLORS = ["#7BD5FF", "#8A9CFF", "#A27BFF", "#C57BFF", "#E17BFF"]
 
 PathInput = Union[str, os.PathLike[str], Path]
 _http_server_lock = threading.Lock()
@@ -585,16 +591,52 @@ def welcome(
 ) -> None:
     """Render a Rich welcome panel for the current session."""
     session = _current_session()
-    console = Console(file=StringIO(), force_terminal=True, width=70)
+    console = Console(file=StringIO(), force_terminal=True, width=100)
+    banner_title = title.strip() or panel_title
     text = Text()
-    text.append(title, style="bold green")
-    if subtitle:
-        text.append(f"\n{subtitle}", style="cyan")
-    if description:
-        text.append(f"\n\n{description}", style="white")
 
-    panel = Panel(text, title=panel_title, border_style="bright_blue")
-    console.print(panel)
+    if pyfiglet is not None:
+        ascii_text = None
+        for font_name in ("ansi_shadow", "bloody", "standard"):
+            try:
+                ascii_text = pyfiglet.Figlet(font=font_name, width=120).renderText(
+                    banner_title
+                )
+                break
+            except pyfiglet.FontNotFound:
+                continue
+
+        if ascii_text:
+            for index, line in enumerate(ascii_text.rstrip("\n").splitlines()):
+                color = WELCOME_GRADIENT_COLORS[
+                    min(index, len(WELCOME_GRADIENT_COLORS) - 1)
+                ]
+                text.append(line, style=f"bold {color}")
+                text.append("\n")
+        else:
+            text.append(f"{banner_title}\n", style=f"bold {WELCOME_GRADIENT_COLORS[-1]}")
+    else:
+        text.append(f"{banner_title}\n", style=f"bold {WELCOME_GRADIENT_COLORS[-1]}")
+
+    if subtitle:
+        text.append(subtitle, style="bold white")
+        text.append("\n")
+
+    console.print(text)
+    console.print("[bold white]Tips for getting started:[/bold white]")
+    console.print("1. Ask questions, edit files, or run commands.")
+    console.print("2. /help for more information.\n")
+
+    info_lines = [f"You are running [bold cyan]{panel_title}[/bold cyan]."]
+    if description:
+        info_lines.append(description)
+
+    info_panel = Panel(
+        "\n".join(info_lines),
+        border_style="bright_white",
+        expand=False,
+    )
+    console.print(info_panel)
     session.send(console.file.getvalue(), newline=False)
 
 
